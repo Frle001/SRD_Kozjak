@@ -1,0 +1,259 @@
+export type ServiceId =
+  | 'mali-nogomet'
+  | 'stolni-tenis'
+  | 'rodendani'
+  | 'treninzi'
+  | 'caffe-bar';
+
+export type ReservationStatus = 'novo' | 'potvrđeno' | 'plaćeno' | 'otkazano';
+
+export interface Service {
+  id: ServiceId;
+  name: string;
+  description: string;
+  duration: number; // minutes
+  priceFrom: number; // EUR
+  emoji: string;
+  colorClass: string;
+  borderClass: string;
+  bgClass: string;
+}
+
+export interface Reservation {
+  id: string;
+  serviceId: ServiceId;
+  serviceName: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  name: string;
+  phone: string;
+  note: string;
+  status: ReservationStatus;
+  createdAt: string; // ISO
+}
+
+export const SERVICES: Service[] = [
+  {
+    id: 'mali-nogomet',
+    name: 'Mali nogomet',
+    description:
+      'Iznajmljivanje zatvorenog terena za mali nogomet. Savršeno za rekreativce, firmaške turnire i amaterske ekipe.',
+    duration: 60,
+    priceFrom: 30,
+    emoji: '⚽',
+    colorClass: 'text-green-600',
+    borderClass: 'border-green-500',
+    bgClass: 'bg-green-50',
+  },
+  {
+    id: 'stolni-tenis',
+    name: 'Stolni tenis',
+    description:
+      'Profesionalni stolovi za stolni tenis dostupni za individualne, parove i grupne sesije svih razina.',
+    duration: 60,
+    priceFrom: 15,
+    emoji: '🏓',
+    colorClass: 'text-blue-600',
+    borderClass: 'border-blue-500',
+    bgClass: 'bg-blue-50',
+  },
+  {
+    id: 'rodendani',
+    name: 'Rođendani',
+    description:
+      'Nezaboravni dječji i odrasli rođendani u sportskom ambijentu. Animacija, catering i rekviziti po dogovoru.',
+    duration: 180,
+    priceFrom: 200,
+    emoji: '🎂',
+    colorClass: 'text-rose-600',
+    borderClass: 'border-rose-500',
+    bgClass: 'bg-rose-50',
+  },
+  {
+    id: 'treninzi',
+    name: 'Treninzi',
+    description:
+      'Individualni i grupni treninzi pod vodstvom licenciranih trenera. Prilagodba plana za sve uzraste.',
+    duration: 90,
+    priceFrom: 50,
+    emoji: '💪',
+    colorClass: 'text-orange-600',
+    borderClass: 'border-orange-500',
+    bgClass: 'bg-orange-50',
+  },
+  {
+    id: 'caffe-bar',
+    name: 'Caffe bar',
+    description:
+      'Rezervacija caffe bara za privatne proslave, poslovne susrete ili opušteno sijelo uz piće i zalogaje.',
+    duration: 120,
+    priceFrom: 0,
+    emoji: '☕',
+    colorClass: 'text-amber-600',
+    borderClass: 'border-amber-500',
+    bgClass: 'bg-amber-50',
+  },
+];
+
+export const TIME_SLOTS: string[] = [
+  '08:00',
+  '09:00',
+  '10:00',
+  '11:00',
+  '12:00',
+  '13:00',
+  '14:00',
+  '15:00',
+  '16:00',
+  '17:00',
+  '18:00',
+  '19:00',
+  '20:00',
+  '21:00',
+];
+
+// Mock unavailable slots by date
+export const UNAVAILABLE_SLOTS: Record<string, string[]> = {
+  '2026-05-11': ['09:00', '10:00', '14:00', '15:00', '18:00'],
+  '2026-05-12': ['08:00', '11:00', '17:00', '19:00'],
+  '2026-05-13': ['10:00', '13:00', '16:00', '20:00'],
+  '2026-05-14': ['09:00', '12:00', '15:00', '18:00', '21:00'],
+  '2026-05-15': ['08:00', '10:00', '14:00', '16:00'],
+  '2026-05-16': ['11:00', '13:00', '17:00', '19:00', '20:00'],
+  '2026-05-17': ['09:00', '12:00', '14:00'],
+};
+
+export const MOCK_RESERVATIONS: Reservation[] = [
+  {
+    id: 'KOZ-001',
+    serviceId: 'mali-nogomet',
+    serviceName: 'Mali nogomet',
+    date: '2026-05-11',
+    time: '09:00',
+    name: 'Ivan Horvat',
+    phone: '+385 91 234 5678',
+    note: 'Trebamo 2 gola i pumpu za loptu',
+    status: 'potvrđeno',
+    createdAt: '2026-05-09T10:00:00Z',
+  },
+  {
+    id: 'KOZ-002',
+    serviceId: 'stolni-tenis',
+    serviceName: 'Stolni tenis',
+    date: '2026-05-11',
+    time: '14:00',
+    name: 'Marija Kovač',
+    phone: '+385 95 876 5432',
+    note: '',
+    status: 'novo',
+    createdAt: '2026-05-10T08:30:00Z',
+  },
+  {
+    id: 'KOZ-003',
+    serviceId: 'treninzi',
+    serviceName: 'Treninzi',
+    date: '2026-05-11',
+    time: '18:00',
+    name: 'Ante Perić',
+    phone: '+385 98 111 2233',
+    note: 'Grupni trening, juniori U15',
+    status: 'plaćeno',
+    createdAt: '2026-05-08T15:45:00Z',
+  },
+  {
+    id: 'KOZ-004',
+    serviceId: 'rodendani',
+    serviceName: 'Rođendani',
+    date: '2026-05-12',
+    time: '11:00',
+    name: 'Petra Jurić',
+    phone: '+385 91 555 6677',
+    note: 'Dječji rođendan, 15 djece, torta u 13h',
+    status: 'potvrđeno',
+    createdAt: '2026-05-07T12:00:00Z',
+  },
+  {
+    id: 'KOZ-005',
+    serviceId: 'caffe-bar',
+    serviceName: 'Caffe bar',
+    date: '2026-05-12',
+    time: '17:00',
+    name: 'Tomislav Blažić',
+    phone: '+385 92 333 4455',
+    note: 'Proslava godišnjice, oko 20 osoba',
+    status: 'novo',
+    createdAt: '2026-05-10T16:20:00Z',
+  },
+  {
+    id: 'KOZ-006',
+    serviceId: 'mali-nogomet',
+    serviceName: 'Mali nogomet',
+    date: '2026-05-13',
+    time: '10:00',
+    name: 'Josip Matić',
+    phone: '+385 99 777 8899',
+    note: '',
+    status: 'otkazano',
+    createdAt: '2026-05-09T11:10:00Z',
+  },
+  {
+    id: 'KOZ-007',
+    serviceId: 'stolni-tenis',
+    serviceName: 'Stolni tenis',
+    date: '2026-05-14',
+    time: '15:00',
+    name: 'Ana Novaković',
+    phone: '+385 91 222 3344',
+    note: 'Molim mirne stolove, ima malog',
+    status: 'novo',
+    createdAt: '2026-05-10T09:00:00Z',
+  },
+  {
+    id: 'KOZ-008',
+    serviceId: 'treninzi',
+    serviceName: 'Treninzi',
+    date: '2026-05-15',
+    time: '08:00',
+    name: 'Luka Tomić',
+    phone: '+385 98 444 5566',
+    note: 'Individualni trening tenisa',
+    status: 'potvrđeno',
+    createdAt: '2026-05-11T07:30:00Z',
+  },
+  {
+    id: 'KOZ-009',
+    serviceId: 'mali-nogomet',
+    serviceName: 'Mali nogomet',
+    date: '2026-05-15',
+    time: '16:00',
+    name: 'Nikola Babić',
+    phone: '+385 95 666 7788',
+    note: '2×5 igrača, teren 2',
+    status: 'plaćeno',
+    createdAt: '2026-05-11T08:00:00Z',
+  },
+  {
+    id: 'KOZ-010',
+    serviceId: 'caffe-bar',
+    serviceName: 'Caffe bar',
+    date: '2026-05-16',
+    time: '19:00',
+    name: 'Katarina Šimić',
+    phone: '+385 91 888 9900',
+    note: 'Poslovni ručak, 8 osoba',
+    status: 'novo',
+    createdAt: '2026-05-11T14:00:00Z',
+  },
+  {
+    id: 'KOZ-011',
+    serviceId: 'rodendani',
+    serviceName: 'Rođendani',
+    date: '2026-05-17',
+    time: '12:00',
+    name: 'Marin Vuković',
+    phone: '+385 92 111 2200',
+    note: 'Odrasli, 30 osoba, žele DJ',
+    status: 'potvrđeno',
+    createdAt: '2026-05-10T11:00:00Z',
+  },
+];

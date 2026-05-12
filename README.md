@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ŠRD Kozjak — Booking App
 
-## Getting Started
+Demo aplikacija za online rezervacije termina u Športsko-rekreacijskom društvu Kozjak.
 
-First, run the development server:
+## Tech stack
+
+- **Next.js 16** (App Router)
+- **React 19**
+- **TypeScript**
+- **Tailwind CSS v4**
+- Mock podaci (nema pravog backenda)
+
+## Pokretanje
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Otvori [http://localhost:3000](http://localhost:3000) u pregledniku.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Stranice
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| URL | Opis |
+|-----|------|
+| `/` | Landing stranica s hero sekcijom, uslugama i CTA |
+| `/rezervacija` | Wizard za rezervaciju (4 koraka) |
+| `/rezervacija?usluga=mali-nogomet` | Rezervacija s predodabranom uslugom |
+| `/admin` | Admin panel s tablom rezervacija i filtrima |
 
-## Learn More
+## Struktura projekta
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/
+├── layout.tsx          # Root layout (Navbar + Footer)
+├── page.tsx            # Landing stranica
+├── globals.css         # Globalni stilovi + Tailwind import
+├── rezervacija/
+│   └── page.tsx        # Stranica za rezervaciju
+└── admin/
+    └── page.tsx        # Admin panel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+components/
+├── Navbar.tsx
+├── Footer.tsx
+├── landing/
+│   ├── HeroSection.tsx
+│   ├── ServicesSection.tsx
+│   └── CtaSection.tsx
+├── booking/
+│   └── BookingFlow.tsx  # Višekoračni wizard (client component)
+└── admin/
+    └── AdminDashboard.tsx  # Dashboard s filterima (client component)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+lib/
+├── mock-data.ts        # Tipovi + mock podaci
+└── utils.ts            # Pomoćne funkcije
+```
 
-## Deploy on Vercel
+## Usluge
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- ⚽ Mali nogomet
+- 🏓 Stolni tenis
+- 🎂 Rođendani
+- 💪 Treninzi
+- ☕ Caffe bar
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Tok rezervacije
+
+1. **Odaberi uslugu** — kartica s opisom i cijenom
+2. **Odaberi datum i vrijeme** — date picker + grid slobodnih termina
+3. **Unesi podatke** — ime, telefon, napomena
+4. **Potvrda** — sažetak rezervacije + WhatsApp link za potvrdu
+
+## Admin panel
+
+- Statistike (danas, tjedan, čeka potvrdu, nenaplaćeno)
+- Filtriranje po usluzi, statusu, datumu i pretraživanju
+- Promjena statusa: Novo → Potvrđeno → Plaćeno / Otkazano
+- Responzivno: kartice na mobitelu, tablica na desktopu
+
+## Napomena
+
+Aplikacija koristi lokalne mock podatke. Sve promjene statusa u admin panelu su privremene (in-memory) i resetiraju se pri refresh stranice. Za produkciju bi se dodao backend (baza podataka + API rute) i autentifikacija.
