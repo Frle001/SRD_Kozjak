@@ -1,4 +1,4 @@
-import type { Service, Reservation } from './mock-data';
+import type { Service, Reservation } from '@/types/app';
 
 export function formatDateHr(isoDate: string): string {
   const [year, month, day] = isoDate.split('-');

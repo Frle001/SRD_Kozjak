@@ -1,4 +1,6 @@
 import AdminDashboard from '@/components/admin/AdminDashboard';
+import { getReservations } from '@/lib/supabase/queries/reservations';
+import type { Reservation } from '@/types/app';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -6,7 +8,22 @@ export const metadata: Metadata = {
   description: 'Upravljanje rezervacijama sportskog centra Kozjak.',
 };
 
-export default function AdminPage() {
+// Always render fresh — admin needs live data, not a cached snapshot.
+export const dynamic = 'force-dynamic';
+
+export default async function AdminPage() {
+  let reservations: Reservation[] = [];
+
+  try {
+    reservations = await getReservations({
+      orderBy: 'reservation_date',
+      ascending: false,
+      limit: 500,
+    });
+  } catch {
+    // Supabase not configured or unreachable — dashboard shows empty state.
+  }
+
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
       {/* Page header stripe */}
@@ -25,7 +42,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <AdminDashboard />
+      <AdminDashboard initialReservations={reservations} />
     </div>
   );
 }

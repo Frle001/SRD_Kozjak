@@ -14,6 +14,23 @@ export type ActivityType =
 
 export type SlotStatus = 'zauzeto' | 'slobodno' | 'rezervirano' | 'ceka-potvrdu';
 
+/** A single user reservation overlaid on a free slot. */
+export interface ReservationBlock {
+  startHour: number;
+  endHour:   number;
+  slotStatus: 'rezervirano' | 'ceka-potvrdu';
+  serviceName: string;
+}
+
+/** Which timetable location a service_id maps to (null = not on the timetable). */
+export const SERVICE_TO_LOCATION: Readonly<Record<string, Location | null>> = {
+  'mali-nogomet': 'teren',
+  'stolni-tenis': 'dvorana-2',
+  'treninzi':     'teren',
+  'rodendani':    'dvorana-1',
+  'caffe-bar':    null,
+};
+
 export interface RecurringEntry {
   id: string;
   location: Location;
@@ -27,8 +44,9 @@ export interface RecurringEntry {
 export interface DayBlock {
   startHour: number;
   endHour: number;
-  kind: 'activity' | 'free' | 'closed';
+  kind: 'activity' | 'free' | 'closed' | 'reserved';
   entry?: RecurringEntry;
+  reservation?: ReservationBlock;
 }
 
 // ─── Activity display config ──────────────────────────────────────────────────
@@ -229,8 +247,18 @@ export const RECURRING_SCHEDULE: RecurringEntry[] = [
 
 // ─── Block generator ──────────────────────────────────────────────────────────
 
-/** Returns an ordered list of blocks (activity, free, closed) covering the full display range */
-export function generateDayBlocks(location: Location, dayOfWeek: number): DayBlock[] {
+/**
+ * Returns an ordered list of blocks (activity, free, closed, reserved) covering
+ * the full display range for a given location and day of week.
+ *
+ * `reservations` are real user bookings from Supabase for this specific date.
+ * They are overlaid onto free slots, splitting them where a booking occupies time.
+ */
+export function generateDayBlocks(
+  location: Location,
+  dayOfWeek: number,
+  reservations: ReservationBlock[] = [],
+): DayBlock[] {
   const cfg = LOCATION_CONFIG[location];
   const isWeekend = dayOfWeek >= 6;
   const [opStart, opEnd] = isWeekend ? cfg.operatingHours.weekend : cfg.operatingHours.weekday;
@@ -240,31 +268,62 @@ export function generateDayBlocks(location: Location, dayOfWeek: number): DayBlo
     .filter((e) => e.location === location && e.dayOfWeek === dayOfWeek)
     .sort((a, b) => a.startHour - b.startHour);
 
-  const blocks: DayBlock[] = [];
+  const base: DayBlock[] = [];
 
   // Pre-operating closed zone
   if (dispStart < opStart) {
-    blocks.push({ startHour: dispStart, endHour: opStart, kind: 'closed' });
+    base.push({ startHour: dispStart, endHour: opStart, kind: 'closed' });
   }
 
   let cur = opStart;
   for (const e of entries) {
     if (e.startHour > cur) {
-      blocks.push({ startHour: cur, endHour: e.startHour, kind: 'free' });
+      base.push({ startHour: cur, endHour: e.startHour, kind: 'free' });
     }
-    blocks.push({ startHour: e.startHour, endHour: e.endHour, kind: 'activity', entry: e });
+    base.push({ startHour: e.startHour, endHour: e.endHour, kind: 'activity', entry: e });
     cur = e.endHour;
   }
   if (cur < opEnd) {
-    blocks.push({ startHour: cur, endHour: opEnd, kind: 'free' });
+    base.push({ startHour: cur, endHour: opEnd, kind: 'free' });
   }
 
   // Post-operating closed zone
   if (opEnd < dispEnd) {
-    blocks.push({ startHour: opEnd, endHour: dispEnd, kind: 'closed' });
+    base.push({ startHour: opEnd, endHour: dispEnd, kind: 'closed' });
   }
 
-  return blocks;
+  // Overlay reservations: split free blocks where a booking occupies time.
+  if (reservations.length === 0) return base;
+
+  const sorted = [...reservations].sort((a, b) => a.startHour - b.startHour);
+  const result: DayBlock[] = [];
+
+  for (const block of base) {
+    if (block.kind !== 'free') {
+      result.push(block);
+      continue;
+    }
+    const overlapping = sorted.filter(
+      (r) => r.startHour < block.endHour && r.endHour > block.startHour,
+    );
+    if (overlapping.length === 0) {
+      result.push(block);
+      continue;
+    }
+    let pos = block.startHour;
+    for (const res of overlapping) {
+      const s = Math.max(res.startHour, block.startHour);
+      const e = Math.min(res.endHour, block.endHour);
+      if (s > pos) result.push({ startHour: pos, endHour: s, kind: 'free' });
+      result.push({ startHour: s, endHour: e, kind: 'reserved', reservation: res });
+      pos = e;
+    }
+    if (pos < block.endHour) {
+      result.push({ startHour: pos, endHour: block.endHour, kind: 'free' });
+    }
+  }
+
+  return result;
 }
 
 /** Count free hours for a given location and day */

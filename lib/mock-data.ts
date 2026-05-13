@@ -1,36 +1,8 @@
-export type ServiceId =
-  | 'mali-nogomet'
-  | 'stolni-tenis'
-  | 'rodendani'
-  | 'treninzi'
-  | 'caffe-bar';
+// Types are defined in types/app.ts — imported here for convenience and
+// re-exported so existing callers that import from this file keep working.
+export type { ServiceId, ReservationStatus, Service, Reservation } from '@/types/app';
 
-export type ReservationStatus = 'novo' | 'potvrđeno' | 'plaćeno' | 'otkazano';
-
-export interface Service {
-  id: ServiceId;
-  name: string;
-  description: string;
-  duration: number; // minutes
-  priceFrom: number; // EUR
-  emoji: string;
-  colorClass: string;
-  borderClass: string;
-  bgClass: string;
-}
-
-export interface Reservation {
-  id: string;
-  serviceId: ServiceId;
-  serviceName: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
-  name: string;
-  phone: string;
-  note: string;
-  status: ReservationStatus;
-  createdAt: string; // ISO
-}
+import type { Service, Reservation } from '@/types/app';
 
 export const SERVICES: Service[] = [
   {

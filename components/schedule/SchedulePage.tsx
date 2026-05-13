@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import WeeklyTimetable from './WeeklyTimetable';
@@ -9,10 +9,69 @@ import {
   LOCATION_CONFIG,
   ACTIVITY_CONFIG,
   RECURRING_SCHEDULE,
+  SERVICE_TO_LOCATION,
   countFreeHours,
 } from '@/lib/kozjak-schedule';
-import type { Location, SlotStatus, ActivityType } from '@/lib/kozjak-schedule';
+import type { Location, SlotStatus, ActivityType, ReservationBlock } from '@/lib/kozjak-schedule';
+import { SERVICES } from '@/lib/mock-data';
+import type { Reservation } from '@/types/app';
 import { fadeUp, staggerContainer } from '@/lib/animations';
+
+/** Convert a YYYY-MM-DD date string to ISO day-of-week (1=Mon … 7=Sun). */
+function dateToDayOfWeek(dateStr: string): number {
+  const d = new Date(`${dateStr}T12:00:00`); // noon avoids DST edge cases
+  const dow = d.getDay(); // 0=Sun
+  return dow === 0 ? 7 : dow;
+}
+
+/** Map app reservation status to schedule SlotStatus. */
+function toSlotStatus(status: string): 'rezervirano' | 'ceka-potvrdu' {
+  return status === 'potvrđeno' || status === 'plaćeno' ? 'rezervirano' : 'ceka-potvrdu';
+}
+
+/** Parse 'HH:MM' to the integer hour. */
+function startHourFromTime(timeStr: string): number {
+  return parseInt(timeStr, 10);
+}
+
+/** Compute endHour from serviceId duration (ceiling to whole hours). */
+function endHourFromServiceId(serviceId: string, startHour: number): number {
+  const durationMin = SERVICES.find((s) => s.id === serviceId)?.duration ?? 60;
+  return startHour + Math.ceil(durationMin / 60);
+}
+
+/**
+ * Build a map of dayOfWeek → ReservationBlock[] for a given location,
+ * using the reservations fetched from Supabase for the current week.
+ */
+function buildDayReservations(
+  reservations: Reservation[],
+  location: Location,
+): Map<number, ReservationBlock[]> {
+  const map = new Map<number, ReservationBlock[]>();
+
+  for (const r of reservations) {
+    if (SERVICE_TO_LOCATION[r.serviceId] !== location) continue;
+
+    const dayOfWeek = dateToDayOfWeek(r.date);
+    const startHour = startHourFromTime(r.time);
+    const endHour   = endHourFromServiceId(r.serviceId, startHour);
+    if (startHour >= endHour) continue;
+
+    const block: ReservationBlock = {
+      startHour,
+      endHour,
+      slotStatus:  toSlotStatus(r.status),
+      serviceName: r.serviceName,
+    };
+
+    const existing = map.get(dayOfWeek) ?? [];
+    existing.push(block);
+    map.set(dayOfWeek, existing);
+  }
+
+  return map;
+}
 
 const LOCATIONS: Location[] = ['teren', 'dvorana-1', 'dvorana-2'];
 
@@ -145,7 +204,13 @@ function StatsStrip({ location }: { location: Location }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function SchedulePage() {
+export default function SchedulePage({
+  reservations = [],
+  weekStart,
+}: {
+  reservations?: Reservation[];
+  weekStart?: string;
+}) {
   const [location, setLocation] = useState<Location>('teren');
   const [activeDays, setActiveDays] = useState<number[]>([]);
   const [activeStatuses, setActiveStatuses] = useState<SlotStatus[]>([]);
@@ -173,6 +238,12 @@ export default function SchedulePage() {
   }
 
   const locCfg = LOCATION_CONFIG[location];
+
+  // Rebuild the reservation overlay whenever location or data changes.
+  const dayReservations = useMemo(
+    () => buildDayReservations(reservations, location),
+    [reservations, location],
+  );
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
@@ -249,6 +320,8 @@ export default function SchedulePage() {
               location={location}
               activeDays={activeDays}
               activeStatuses={activeStatuses}
+              dayReservations={dayReservations}
+              weekStart={weekStart}
             />
           </div>
 

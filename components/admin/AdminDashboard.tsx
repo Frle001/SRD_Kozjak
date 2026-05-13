@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SERVICES } from '@/lib/mock-data';
-import type { Reservation, ReservationStatus, ServiceId } from '@/lib/mock-data';
-import { useReservations } from '@/components/ReservationProvider';
+import type { Reservation, ReservationStatus, ServiceId } from '@/types/app';
+import { updateReservationStatusAction } from '@/app/actions/reservations';
 import { fadeUp, staggerContainer, slideDown } from '@/lib/animations';
 import {
   formatDateHr,
@@ -334,8 +334,13 @@ function isFresh(r: Reservation): boolean {
 /* ────────────────────────────────────────────────────────────
    Main dashboard
    ────────────────────────────────────────────────────────────*/
-export default function AdminDashboard() {
-  const { reservations, updateStatus } = useReservations();
+export default function AdminDashboard({
+  initialReservations,
+}: {
+  initialReservations: Reservation[];
+}) {
+  const [reservations, setReservations] = useState<Reservation[]>(initialReservations);
+  const [isPending, startTransition] = useTransition();
   const [filterService, setFilterService] = useState<ServiceId | ''>('');
   const [filterStatus, setFilterStatus] = useState<ReservationStatus | ''>('');
   const [filterDate, setFilterDate] = useState('');
@@ -388,7 +393,14 @@ export default function AdminDashboard() {
   }, [reservations, filterService, filterStatus, filterDate, search]);
 
   function handleStatusChange(id: string, status: ReservationStatus) {
-    updateStatus(id, status);
+    // Optimistic update — UI reflects the change immediately.
+    setReservations((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status } : r)),
+    );
+    startTransition(async () => {
+      await updateReservationStatusAction(id, status);
+      // On failure the optimistic state stays; a page refresh will show the real DB value.
+    });
   }
 
   function clearFilters() {

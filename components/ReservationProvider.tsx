@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { MOCK_RESERVATIONS } from '@/lib/mock-data';
-import type { Reservation, ReservationStatus } from '@/lib/mock-data';
+import type { Reservation, ReservationStatus } from '@/types/app';
 
 const STORAGE_KEY = 'srd_reservations_v1';
 

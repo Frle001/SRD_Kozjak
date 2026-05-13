@@ -1,4 +1,5 @@
 import BookingFlow from '@/components/booking/BookingFlow';
+import { getServices } from '@/lib/supabase/queries/services';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -11,7 +12,10 @@ export default async function ReservationPage({
 }: {
   searchParams: Promise<{ usluga?: string }>;
 }) {
-  const { usluga } = await searchParams;
+  const [{ usluga }, services] = await Promise.all([
+    searchParams,
+    getServices(),
+  ]);
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 to-white">
@@ -30,7 +34,7 @@ export default async function ReservationPage({
         </div>
       </div>
 
-      <BookingFlow initialServiceId={usluga} />
+      <BookingFlow initialServiceId={usluga} services={services} />
     </div>
   );
 }

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useTransition } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SERVICES, TIME_SLOTS, UNAVAILABLE_SLOTS } from '@/lib/mock-data';
-import type { Reservation, Service } from '@/lib/mock-data';
+import { SERVICES, TIME_SLOTS } from '@/lib/mock-data';
+import type { Reservation, Service } from '@/types/app';
 import {
   formatDateHr,
   formatDuration,
@@ -14,6 +14,10 @@ import {
 } from '@/lib/utils';
 import { useReservations } from '@/components/ReservationProvider';
 import { scaleIn, staggerContainer, fadeUp } from '@/lib/animations';
+import {
+  submitReservationAction,
+  getAvailabilityAction,
+} from '@/app/actions/reservations';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -122,9 +126,11 @@ function SelectionStrip({
 function ServiceStep({
   selected,
   onSelect,
+  services,
 }: {
   selected: Service | null;
   onSelect: (s: Service) => void;
+  services: Service[];
 }) {
   return (
     <div>
@@ -134,7 +140,7 @@ function ServiceStep({
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {SERVICES.map((service) => {
+        {services.map((service) => {
           const isSelected = selected?.id === service.id;
           return (
             <button
@@ -193,19 +199,42 @@ function ServiceStep({
    Step 2 — Date & time
    ────────────────────────────────────────────────────────────*/
 function DateTimeStep({
+  serviceId,
   date,
   time,
   onDateChange,
   onTimeChange,
 }: {
+  serviceId: string;
   date: string;
   time: string;
   onDateChange: (d: string) => void;
   onTimeChange: (t: string) => void;
 }) {
   const today = getTodayStr();
-  const unavailable = date ? (UNAVAILABLE_SLOTS[date] ?? []) : [];
-  const freeCount = TIME_SLOTS.length - unavailable.length;
+  const [takenSlots, setTakenSlots] = useState<string[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+
+  // Fetch real slot availability whenever service or date changes.
+  useEffect(() => {
+    if (!date) {
+      setTakenSlots([]);
+      return;
+    }
+    let cancelled = false;
+    setAvailabilityLoading(true);
+    getAvailabilityAction(serviceId, date).then((result) => {
+      if (!cancelled) {
+        setTakenSlots(result.takenSlots);
+        setAvailabilityLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [serviceId, date]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const freeCount = TIME_SLOTS.length - takenSlots.length;
 
   return (
     <div>
@@ -244,14 +273,43 @@ function DateTimeStep({
             <p className="text-sm font-semibold text-slate-700">
               Slobodni termini — {formatDateHr(date)}
             </p>
-            <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
-              {freeCount} slobodnih
-            </span>
+            {availabilityLoading ? (
+              <span className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+                <svg
+                  className="w-3 h-3 animate-spin"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                  />
+                </svg>
+                Provjera...
+              </span>
+            ) : (
+              <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+                {freeCount} slobodnih
+              </span>
+            )}
           </div>
 
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+          <div
+            className={`grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 transition-opacity duration-150 ${
+              availabilityLoading ? 'opacity-40 pointer-events-none' : ''
+            }`}
+          >
             {TIME_SLOTS.map((slot) => {
-              const taken = unavailable.includes(slot);
+              const taken = takenSlots.includes(slot);
               const selected = time === slot;
               return (
                 <button
@@ -563,15 +621,18 @@ function ConfirmationStep({
    ────────────────────────────────────────────────────────────*/
 export default function BookingFlow({
   initialServiceId,
+  services = SERVICES,
 }: {
   initialServiceId?: string;
+  services?: Service[];
 }) {
   const { addReservation } = useReservations();
+  const [isPending, startTransition] = useTransition();
 
   const [step, setStep] = useState<Step>(1);
   const dirRef = useRef<1 | -1>(1); // 1 = forward, -1 = back
   const [selectedService, setSelectedService] = useState<Service | null>(
-    () => SERVICES.find((s) => s.id === initialServiceId) ?? null
+    () => services.find((s) => s.id === initialServiceId) ?? null
   );
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -579,12 +640,13 @@ export default function BookingFlow({
   const [phone, setPhone] = useState('');
   const [note, setNote] = useState('');
   const [bookingId, setBookingId] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initialServiceId && SERVICES.find((s) => s.id === initialServiceId)) {
+    if (initialServiceId && services.find((s) => s.id === initialServiceId)) {
       setStep(2);
     }
-  }, [initialServiceId]);
+  }, [initialServiceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleServiceSelect(service: Service) {
     setSelectedService(service);
@@ -597,30 +659,49 @@ export default function BookingFlow({
 
   function handleBack() {
     dirRef.current = -1;
+    setSubmitError(null);
     setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
   }
 
   function handleSubmit() {
     if (!selectedService) return;
-    dirRef.current = 1;
+    setSubmitError(null);
 
-    const id = generateBookingId();
-    const newReservation: Reservation = {
-      id,
-      serviceId: selectedService.id,
-      serviceName: selectedService.name,
-      date,
-      time,
-      name: name.trim(),
-      phone: phone.trim(),
-      note: note.trim(),
-      status: 'novo',
-      createdAt: new Date().toISOString(),
-    };
+    startTransition(async () => {
+      const result = await submitReservationAction(
+        selectedService.id,
+        date,
+        time,
+        selectedService.duration,
+        name,
+        phone,
+        note,
+      );
 
-    addReservation(newReservation);
-    setBookingId(id);
-    setStep(4);
+      if (!result.success) {
+        setSubmitError(result.error);
+        return;
+      }
+
+      // Keep local context in sync so the admin panel shows the new entry
+      const localReservation: Reservation = {
+        id: result.bookingRef,
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        date,
+        time,
+        name: name.trim(),
+        phone: phone.trim(),
+        note: note.trim(),
+        status: 'novo',
+        createdAt: new Date().toISOString(),
+      };
+      addReservation(localReservation);
+
+      dirRef.current = 1;
+      setBookingId(result.bookingRef);
+      setStep(4);
+    });
   }
 
   function handleNewBooking() {
@@ -690,10 +771,12 @@ export default function BookingFlow({
               <ServiceStep
                 selected={selectedService}
                 onSelect={handleServiceSelect}
+                services={services}
               />
             )}
-            {step === 2 && (
+            {step === 2 && selectedService && (
               <DateTimeStep
+                serviceId={selectedService.id}
                 date={date}
                 time={time}
                 onDateChange={setDate}
@@ -730,48 +813,84 @@ export default function BookingFlow({
 
             {/* Navigation */}
             {step < 4 && (
-              <div className="mt-8 flex gap-3 pt-6 border-t border-slate-100">
-                {step > 1 ? (
-                  <button
-                    onClick={handleBack}
-                    className="flex-1 py-3 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
-                  >
-                    ← Natrag
-                  </button>
-                ) : (
-                  <Link
-                    href="/"
-                    className="flex-1 py-3 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors text-center"
-                  >
-                    ← Početna
-                  </Link>
+              <div className="mt-8 pt-6 border-t border-slate-100">
+                {/* Error banner — only on step 3 after a failed submit */}
+                {submitError && step === 3 && (
+                  <div className="mb-4 flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+                    <span className="flex-shrink-0 mt-0.5">⚠️</span>
+                    <span>{submitError}</span>
+                  </div>
                 )}
 
-                {step < 3 ? (
-                  <button
-                    onClick={handleNext}
-                    disabled={!canProceed()}
-                    className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
-                      canProceed()
-                        ? 'bg-green-500 hover:bg-green-600 text-white shadow-md'
-                        : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                    }`}
-                  >
-                    Dalje →
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSubmit}
-                    disabled={!canProceed()}
-                    className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
-                      canProceed()
-                        ? 'bg-green-500 hover:bg-green-600 text-white shadow-md'
-                        : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                    }`}
-                  >
-                    Potvrdi rezervaciju ✓
-                  </button>
-                )}
+                <div className="flex gap-3">
+                  {step > 1 ? (
+                    <button
+                      onClick={handleBack}
+                      disabled={isPending}
+                      className="flex-1 py-3 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
+                    >
+                      ← Natrag
+                    </button>
+                  ) : (
+                    <Link
+                      href="/"
+                      className="flex-1 py-3 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors text-center"
+                    >
+                      ← Početna
+                    </Link>
+                  )}
+
+                  {step < 3 ? (
+                    <button
+                      onClick={handleNext}
+                      disabled={!canProceed()}
+                      className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
+                        canProceed()
+                          ? 'bg-green-500 hover:bg-green-600 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                      }`}
+                    >
+                      Dalje →
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSubmit}
+                      disabled={!canProceed() || isPending}
+                      className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                        canProceed() && !isPending
+                          ? 'bg-green-500 hover:bg-green-600 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                      }`}
+                    >
+                      {isPending ? (
+                        <>
+                          <svg
+                            className="w-4 h-4 animate-spin"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                            />
+                          </svg>
+                          Slanje...
+                        </>
+                      ) : (
+                        'Potvrdi rezervaciju ✓'
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </motion.div>

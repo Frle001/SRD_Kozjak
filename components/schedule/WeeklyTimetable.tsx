@@ -8,7 +8,21 @@ import {
   HR_DAYS_SHORT,
   generateDayBlocks,
 } from '@/lib/kozjak-schedule';
-import type { Location, SlotStatus, DayBlock } from '@/lib/kozjak-schedule';
+import type { Location, SlotStatus, DayBlock, ReservationBlock } from '@/lib/kozjak-schedule';
+
+/** Format YYYY-MM-DD as 'D.M.' for compact column display. */
+function fmtShort(dateStr: string): string {
+  const [, m, d] = dateStr.split('-');
+  return `${parseInt(d)}.${parseInt(m)}.`;
+}
+
+/** Given weekStart (Monday) and 1-based dayOfWeek, return the date string. */
+function weekDate(weekStart: string | undefined, dayOfWeek: number): string | null {
+  if (!weekStart) return null;
+  const base = new Date(`${weekStart}T12:00:00`);
+  base.setDate(base.getDate() + (dayOfWeek - 1));
+  return base.toISOString().split('T')[0];
+}
 
 const HOUR_HEIGHT = 56; // px per hour
 
@@ -67,7 +81,35 @@ function SlotBlock({ block, dimmed }: SlotProps) {
     );
   }
 
-  // Activity block
+  // Reserved block (real user booking from Supabase)
+  if (block.kind === 'reserved') {
+    const res = block.reservation!;
+    const isPending = res.slotStatus === 'ceka-potvrdu';
+    return (
+      <div
+        style={{ height: h }}
+        className={`border-l-4 px-2 py-1.5 overflow-hidden flex flex-col gap-0.5 flex-shrink-0 transition-opacity ${
+          isPending
+            ? 'border-amber-400 bg-amber-50'
+            : 'border-blue-400 bg-blue-50'
+        } ${dimmed ? 'opacity-25' : ''}`}
+      >
+        <div className="flex items-center gap-1 min-w-0">
+          <span className="text-sm leading-none flex-shrink-0">📋</span>
+          <span className={`text-[11px] font-bold leading-tight truncate ${isPending ? 'text-amber-800' : 'text-blue-800'}`}>
+            {res.serviceName}
+          </span>
+        </div>
+        {hours >= 1 && (
+          <span className={`text-[10px] font-semibold leading-none ${isPending ? 'text-amber-600' : 'text-blue-600'}`}>
+            {isPending ? 'Čeka potvrdu' : 'Rezervirano'}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Activity block (recurring schedule)
   const cfg = ACTIVITY_CONFIG[block.entry!.activityType];
   return (
     <div
@@ -100,16 +142,21 @@ function MobileDayCard({
   location,
   dayOfWeek,
   activeStatuses,
+  reservations,
+  dateLabel,
 }: {
   location: Location;
   dayOfWeek: number;
   activeStatuses: SlotStatus[];
+  reservations: ReservationBlock[];
+  dateLabel: string | null;
 }) {
-  const blocks = generateDayBlocks(location, dayOfWeek);
+  const blocks = generateDayBlocks(location, dayOfWeek, reservations);
   const visible = blocks.filter((b) => {
     if (activeStatuses.length === 0) return true;
     if (b.kind === 'closed') return false;
     if (b.kind === 'free') return activeStatuses.includes('slobodno');
+    if (b.kind === 'reserved') return activeStatuses.includes(b.reservation!.slotStatus);
     return activeStatuses.includes(b.entry!.status);
   });
 
@@ -117,8 +164,11 @@ function MobileDayCard({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 bg-slate-800 text-white">
+      <div className="px-4 py-3 bg-slate-800 text-white flex items-center justify-between">
         <span className="font-bold text-sm">{HR_DAYS[dayOfWeek - 1]}</span>
+        {dateLabel && (
+          <span className="text-xs text-slate-400">{dateLabel}</span>
+        )}
       </div>
       <div className="p-3 space-y-2">
         {visible.map((block, i) => {
@@ -141,6 +191,28 @@ function MobileDayCard({
                 >
                   Rezerviraj
                 </Link>
+              </div>
+            );
+          }
+          if (block.kind === 'reserved') {
+            const res = block.reservation!;
+            const isPending = res.slotStatus === 'ceka-potvrdu';
+            return (
+              <div
+                key={i}
+                className={`flex items-center gap-3 rounded-xl border-l-4 px-3 py-2.5 ${
+                  isPending ? 'bg-amber-50 border-amber-400' : 'bg-blue-50 border-blue-400'
+                }`}
+              >
+                <span className="text-xl flex-shrink-0">📋</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-bold truncate ${isPending ? 'text-amber-800' : 'text-blue-800'}`}>
+                    {res.serviceName}
+                  </p>
+                  <p className={`text-xs ${isPending ? 'text-amber-600' : 'text-blue-600'}`}>
+                    {pad(block.startHour)} – {pad(block.endHour)} · {isPending ? 'Čeka potvrdu' : 'Rezervirano'}
+                  </p>
+                </div>
               </div>
             );
           }
@@ -169,11 +241,19 @@ function MobileDayCard({
 
 interface Props {
   location: Location;
-  activeDays: number[];     // 1–7, empty = all
-  activeStatuses: SlotStatus[]; // empty = show all
+  activeDays: number[];
+  activeStatuses: SlotStatus[];
+  dayReservations?: Map<number, ReservationBlock[]>;
+  weekStart?: string;
 }
 
-export default function WeeklyTimetable({ location, activeDays, activeStatuses }: Props) {
+export default function WeeklyTimetable({
+  location,
+  activeDays,
+  activeStatuses,
+  dayReservations,
+  weekStart,
+}: Props) {
   const cfg = LOCATION_CONFIG[location];
   const [dispStart, dispEnd] = cfg.displayRange;
   const totalHours = dispEnd - dispStart;
@@ -186,6 +266,7 @@ export default function WeeklyTimetable({ location, activeDays, activeStatuses }
     if (activeStatuses.length === 0) return false;
     if (block.kind === 'closed') return false;
     if (block.kind === 'free') return !activeStatuses.includes('slobodno');
+    if (block.kind === 'reserved') return !activeStatuses.includes(block.reservation!.slotStatus);
     return !activeStatuses.includes(block.entry!.status);
   }
 
@@ -196,19 +277,25 @@ export default function WeeklyTimetable({ location, activeDays, activeStatuses }
         {/* Day headers */}
         <div className="flex border-b border-slate-200 bg-slate-800 rounded-t-2xl">
           <div className="w-14 flex-shrink-0 border-r border-slate-700" />
-          {daysToShow.map((d) => (
-            <div
-              key={d}
-              className="flex-1 min-w-[80px] text-center py-3 border-r border-slate-700 last:border-r-0"
-            >
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:block">
-                {HR_DAYS[d - 1]}
+          {daysToShow.map((d) => {
+            const date = weekDate(weekStart, d);
+            return (
+              <div
+                key={d}
+                className="flex-1 min-w-[80px] text-center py-3 border-r border-slate-700 last:border-r-0"
+              >
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:block">
+                  {HR_DAYS[d - 1]}
+                </div>
+                <div className="text-xs font-bold text-white lg:hidden">
+                  {HR_DAYS_SHORT[d - 1]}
+                </div>
+                {date && (
+                  <div className="text-[10px] text-slate-500 mt-0.5">{fmtShort(date)}</div>
+                )}
               </div>
-              <div className="text-xs font-bold text-white lg:hidden">
-                {HR_DAYS_SHORT[d - 1]}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Grid body */}
@@ -230,7 +317,8 @@ export default function WeeklyTimetable({ location, activeDays, activeStatuses }
 
           {/* Day columns */}
           {daysToShow.map((d) => {
-            const blocks = generateDayBlocks(location, d);
+            const res = dayReservations?.get(d) ?? [];
+            const blocks = generateDayBlocks(location, d, res);
             return (
               <div
                 key={d}
@@ -247,14 +335,19 @@ export default function WeeklyTimetable({ location, activeDays, activeStatuses }
 
       {/* ── Mobile day cards (< md) ───────────────────────────────────── */}
       <div className="md:hidden space-y-3">
-        {daysToShow.map((d) => (
-          <MobileDayCard
-            key={d}
-            location={location}
-            dayOfWeek={d}
-            activeStatuses={activeStatuses}
-          />
-        ))}
+        {daysToShow.map((d) => {
+          const date = weekDate(weekStart, d);
+          return (
+            <MobileDayCard
+              key={d}
+              location={location}
+              dayOfWeek={d}
+              activeStatuses={activeStatuses}
+              reservations={dayReservations?.get(d) ?? []}
+              dateLabel={date ? fmtShort(date) : null}
+            />
+          );
+        })}
       </div>
     </>
   );
