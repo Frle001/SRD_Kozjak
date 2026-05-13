@@ -26,6 +26,18 @@ body {
   border-radius: 3px;
 }
 
+/* Hide scrollbar while keeping scroll functionality */
+@utility scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+/* iOS safe-area bottom padding for notched phones */
+@utility safe-area-pb {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
 /* Hero grass pattern overlay */
 .hero-pattern {
   background-image:

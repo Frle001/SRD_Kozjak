@@ -24,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="hr" className={`${inter.variable} h-full`}>
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900 antialiased">
+      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900 antialiased overflow-x-hidden">
         <ReservationProvider>
           <Navbar />
           <main className="flex-1">{children}</main>
