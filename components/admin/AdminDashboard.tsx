@@ -91,7 +91,7 @@ function StatusSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as ReservationStatus)}
-      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-700 bg-white focus:outline-none focus:border-green-500 transition-colors cursor-pointer"
+      className="text-xs border border-slate-200 rounded-lg px-2 py-2 text-slate-700 bg-white focus:outline-none focus:border-green-500 transition-colors cursor-pointer min-h-[36px]"
     >
       {ALL_STATUSES.map((s) => (
         <option key={s} value={s}>
@@ -393,13 +393,25 @@ export default function AdminDashboard({
   }, [reservations, filterService, filterStatus, filterDate, search]);
 
   function handleStatusChange(id: string, status: ReservationStatus) {
+    // Capture previous status so we can revert if the server call fails.
+    const previous = reservations.find((r) => r.id === id)?.status;
+
     // Optimistic update — UI reflects the change immediately.
     setReservations((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status } : r)),
     );
+
     startTransition(async () => {
-      await updateReservationStatusAction(id, status);
-      // On failure the optimistic state stays; a page refresh will show the real DB value.
+      const result = await updateReservationStatusAction(id, status);
+      if (!result.success) {
+        // Revert to previous status on failure.
+        console.error('[AdminDashboard] Status update failed:', result.error);
+        if (previous !== undefined) {
+          setReservations((prev) =>
+            prev.map((r) => (r.id === id ? { ...r, status: previous } : r)),
+          );
+        }
+      }
     });
   }
 
@@ -521,7 +533,7 @@ export default function AdminDashboard({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Ime, telefon ili ID..."
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-green-500 transition-colors"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-green-500 transition-colors min-h-[44px]"
             />
           </div>
 
@@ -534,7 +546,7 @@ export default function AdminDashboard({
               onChange={(e) =>
                 setFilterService(e.target.value as ServiceId | '')
               }
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:border-green-500 transition-colors"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 bg-white focus:outline-none focus:border-green-500 transition-colors min-h-[44px]"
             >
               <option value="">Sve usluge</option>
               {SERVICES.map((s) => (
@@ -554,7 +566,7 @@ export default function AdminDashboard({
               onChange={(e) =>
                 setFilterStatus(e.target.value as ReservationStatus | '')
               }
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:border-green-500 transition-colors"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 bg-white focus:outline-none focus:border-green-500 transition-colors min-h-[44px]"
             >
               <option value="">Svi statusi</option>
               {ALL_STATUSES.map((s) => (
@@ -580,7 +592,7 @@ export default function AdminDashboard({
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="py-2 px-4 text-sm text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              className="py-2.5 px-4 text-sm text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors min-h-[44px]"
             >
               Očisti
             </button>

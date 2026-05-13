@@ -180,22 +180,22 @@ function StatsStrip({ location }: { location: Location }) {
       variants={staggerContainer}
       initial="hidden"
       animate="show"
-      className="grid grid-cols-3 gap-3"
+      className="grid grid-cols-3 gap-2 sm:gap-3"
     >
       {[
         { label: 'Zauzeto tjedno', value: `${occ}h`, sub: `${pct}% iskorištenosti`, icon: '📋' },
-        { label: 'Slobodno tjedno', value: `${free}h`, sub: 'dostupno za rezervaciju', icon: '✅' },
-        { label: 'Aktivnosti', value: uniqueTypes, sub: 'različitih programa', icon: '🏃' },
+        { label: 'Slobodno', value: `${free}h`, sub: 'za rezervaciju', icon: '✅' },
+        { label: 'Aktivnosti', value: uniqueTypes, sub: 'programa', icon: '🏃' },
       ].map(({ label, value, sub, icon }) => (
         <motion.div
           key={label}
           variants={fadeUp}
-          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4"
+          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-4"
         >
-          <div className="text-xl mb-1">{icon}</div>
-          <div className="text-2xl font-black text-slate-900 leading-none">{value}</div>
-          <div className="text-xs font-semibold text-slate-600 mt-1">{label}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>
+          <div className="text-lg sm:text-xl mb-1">{icon}</div>
+          <div className="text-xl sm:text-2xl font-black text-slate-900 leading-none">{value}</div>
+          <div className="text-[11px] sm:text-xs font-semibold text-slate-600 mt-1 leading-tight">{label}</div>
+          <div className="text-[10px] text-slate-400 mt-0.5 leading-tight hidden sm:block">{sub}</div>
         </motion.div>
       ))}
     </motion.div>
@@ -281,19 +281,21 @@ export default function SchedulePage({
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
 
         {/* Location tabs */}
-        <div className="flex gap-2 flex-wrap">
-          {LOCATIONS.map((l) => (
-            <LocationTab
-              key={l}
-              location={l}
-              selected={location === l}
-              onClick={() => handleLocationChange(l)}
-            />
-          ))}
-          <div className="ml-auto flex-shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {LOCATIONS.map((l) => (
+              <LocationTab
+                key={l}
+                location={l}
+                selected={location === l}
+                onClick={() => handleLocationChange(l)}
+              />
+            ))}
+          </div>
+          <div className="sm:ml-auto flex-shrink-0">
             <Link
               href="/rezervacija"
-              className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm px-4 py-3 rounded-xl transition-colors shadow-md"
+              className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm px-4 py-3 rounded-xl transition-colors shadow-md min-h-[44px]"
             >
               <span>＋</span> Nova rezervacija
             </Link>

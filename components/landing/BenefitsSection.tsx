@@ -150,7 +150,7 @@ export default function BenefitsSection() {
               </div>
               <a
                 href="/admin"
-                className="mt-5 inline-flex items-center justify-center gap-2 bg-white text-green-700 font-bold text-sm px-4 py-2.5 rounded-xl hover:bg-green-50 transition-colors"
+                className="mt-5 inline-flex items-center justify-center gap-2 bg-white text-green-700 font-bold text-sm px-4 py-3 rounded-xl hover:bg-green-50 transition-colors min-h-[44px]"
               >
                 Otvori demo →
               </a>
@@ -174,7 +174,8 @@ export default function BenefitsSection() {
             </p>
 
             <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm bg-white">
-              <div className="grid grid-cols-2">
+              {/* Column headers — hidden on mobile, shown on sm+ */}
+              <div className="hidden sm:grid sm:grid-cols-2">
                 <div className="bg-red-50 px-5 py-3 border-b border-r border-slate-200">
                   <span className="text-xs font-bold text-red-500 uppercase tracking-wide">
                     ❌ Bez sustava
@@ -190,17 +191,17 @@ export default function BenefitsSection() {
               {COMPARISON.map((row, i) => (
                 <div
                   key={i}
-                  className={`grid grid-cols-2 ${
+                  className={`grid grid-cols-1 sm:grid-cols-2 ${
                     i < COMPARISON.length - 1 ? 'border-b border-slate-100' : ''
                   }`}
                 >
-                  <div className="px-5 py-4 border-r border-slate-100 flex items-start gap-2.5">
+                  <div className="px-5 py-3 sm:py-4 sm:border-r border-b sm:border-b-0 border-slate-100 flex items-start gap-2.5 bg-red-50/40 sm:bg-transparent">
                     <span className="text-red-400 mt-0.5 flex-shrink-0 text-sm">✕</span>
                     <span className="text-sm text-slate-500 leading-snug">
                       {row.before}
                     </span>
                   </div>
-                  <div className="px-5 py-4 flex items-start gap-2.5">
+                  <div className="px-5 py-3 sm:py-4 flex items-start gap-2.5 bg-green-50/40 sm:bg-transparent">
                     <span className="text-green-500 mt-0.5 flex-shrink-0 text-sm">✓</span>
                     <span className="text-sm text-slate-800 font-medium leading-snug">
                       {row.after}

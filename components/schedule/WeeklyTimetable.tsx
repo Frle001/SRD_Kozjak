@@ -187,7 +187,7 @@ function MobileDayCard({
                 </div>
                 <Link
                   href="/rezervacija"
-                  className="text-[11px] font-bold bg-emerald-500 text-white px-3 py-1.5 rounded-full whitespace-nowrap shadow-sm hover:bg-emerald-600 transition-colors"
+                  className="text-[11px] font-bold bg-emerald-500 text-white px-3 py-2 rounded-full whitespace-nowrap shadow-sm hover:bg-emerald-600 transition-colors min-h-[36px] flex items-center"
                 >
                   Rezerviraj
                 </Link>

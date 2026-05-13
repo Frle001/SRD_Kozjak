@@ -57,7 +57,7 @@ export default function ServiceCards({ services }: { services: Service[] }) {
 
             <Link
               href={`/rezervacija?usluga=${service.id}`}
-              className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-sm transition-all ${service.bgClass} ${service.colorClass} hover:opacity-90`}
+              className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-sm transition-all min-h-[44px] ${service.bgClass} ${service.colorClass} hover:opacity-90`}
             >
               Rezerviraj
               <span className="text-xs">→</span>

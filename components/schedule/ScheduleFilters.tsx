@@ -51,7 +51,7 @@ export default function ScheduleFilters({
               <button
                 key={d}
                 onClick={() => onDayToggle(d)}
-                className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-all ${
+                className={`text-xs font-semibold px-3 py-2 rounded-lg transition-all min-h-[36px] ${
                   isActive
                     ? 'bg-slate-800 text-white shadow-sm'
                     : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
@@ -79,7 +79,7 @@ export default function ScheduleFilters({
               <button
                 key={s}
                 onClick={() => onStatusToggle(s)}
-                className={`text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all ${
+                className={`text-[11px] font-semibold px-3 py-2 rounded-lg transition-all min-h-[36px] ${
                   STATUS_COLORS[s]
                 } ${isActive ? STATUS_ACTIVE[s] : 'opacity-40 hover:opacity-70'}`}
               >
@@ -92,7 +92,7 @@ export default function ScheduleFilters({
         {hasFilters && (
           <button
             onClick={onReset}
-            className="ml-auto text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors whitespace-nowrap"
+            className="ml-auto text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors whitespace-nowrap px-2 py-2 min-h-[36px]"
           >
             Resetiraj filtere ×
           </button>

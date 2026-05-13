@@ -1,6 +1,7 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { revalidatePath } from 'next/cache';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { createReservation, isSlotAvailable } from '@/lib/supabase/queries/reservations';
 import { UNAVAILABLE_SLOTS } from '@/lib/mock-data';
 import type { ReservationStatus } from '@/types/app';
@@ -163,20 +164,36 @@ export async function submitReservationAction(
 export async function updateReservationStatusAction(
   id: string,
   status: ReservationStatus,
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; error?: string }> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    // Dev/demo mode — no real DB, accept optimistic update.
+    return { success: true };
+  }
+
   try {
-    const { createServiceClient } = await import('@/lib/supabase/server');
     const supabase = await createServiceClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const table = supabase.from('reservations') as any;
-    const { error } = await table.update({ status }).eq('id', id);
+    const { data, error } = await table
+      .update({ status })
+      .eq('id', id)
+      .select('id')
+      .single();
+
     if (error) {
-      console.error('[updateReservationStatusAction]', error);
-      return { success: false };
+      console.error('[updateReservationStatusAction] Supabase error:', error.message, { id, status });
+      return { success: false, error: error.message };
     }
+
+    if (!data) {
+      console.error('[updateReservationStatusAction] No row matched id:', id);
+      return { success: false, error: 'Reservation not found' };
+    }
+
+    revalidatePath('/admin');
     return { success: true };
   } catch (err) {
-    console.error('[updateReservationStatusAction]', err);
-    return { success: false };
+    console.error('[updateReservationStatusAction] Unexpected error:', err);
+    return { success: false, error: String(err) };
   }
 }

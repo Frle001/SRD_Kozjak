@@ -316,7 +316,7 @@ function DateTimeStep({
                   key={slot}
                   disabled={taken}
                   onClick={() => onTimeChange(slot)}
-                  className={`py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-all ${
+                  className={`py-3 px-3 rounded-xl text-sm font-medium border-2 transition-all min-h-[44px] ${
                     taken
                       ? 'border-slate-100 bg-slate-100 text-slate-300 cursor-not-allowed line-through'
                       : selected
@@ -608,7 +608,7 @@ function ConfirmationStep({
       <motion.button
         variants={fadeUp}
         onClick={onNewBooking}
-        className="w-full py-2.5 text-sm text-slate-400 hover:text-slate-700 transition-colors"
+        className="w-full py-3 text-sm text-slate-400 hover:text-slate-700 transition-colors min-h-[44px]"
       >
         ← Napravi novu rezervaciju
       </motion.button>
