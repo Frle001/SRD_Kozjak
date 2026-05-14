@@ -38,11 +38,6 @@ export default function Footer() {
                   Rezervacija termina
                 </Link>
               </li>
-              <li>
-                <Link href="/admin" className="hover:text-white transition-colors">
-                  Admin panel
-                </Link>
-              </li>
             </ul>
           </div>
 
@@ -75,7 +70,14 @@ export default function Footer() {
 
         <div className="mt-10 pt-6 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs">
           <p>© 2026 ŠRD Kozjak. Sva prava pridržana.</p>
-          <p className="text-slate-600">Izrađeno s ❤️ za Kozjak</p>
+          <div className="flex items-center gap-4">
+            <p className="text-slate-600">Izrađeno s ❤️ za Kozjak</p>
+            {process.env.NODE_ENV === 'development' && (
+              <Link href="/admin" className="text-slate-700 hover:text-slate-500 transition-colors">
+                ⚙ admin
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </footer>

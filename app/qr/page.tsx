@@ -11,7 +11,7 @@ interface ActionButtonProps {
   emoji: string;
   label: string;
   sub: string;
-  variant?: 'primary' | 'default' | 'ghost';
+  variant?: 'primary' | 'amber' | 'default' | 'ghost';
   external?: boolean;
 }
 
@@ -21,6 +21,7 @@ function ActionButton({ href, emoji, label, sub, variant = 'default', external }
 
   const styles = {
     primary: `${base} bg-green-500 hover:bg-green-400 text-white shadow-lg shadow-green-900/30`,
+    amber:   `${base} bg-amber-500 hover:bg-amber-400 text-white shadow-lg shadow-amber-900/30`,
     default: `${base} bg-white/10 hover:bg-white/20 text-white border border-white/15`,
     ghost:   `${base} bg-white text-slate-800 hover:bg-slate-50 shadow-sm border border-slate-200`,
   };
@@ -30,7 +31,7 @@ function ActionButton({ href, emoji, label, sub, variant = 'default', external }
       <span className="text-2xl flex-shrink-0 leading-none">{emoji}</span>
       <div className="min-w-0">
         <div className="font-bold text-base leading-tight">{label}</div>
-        <div className={`text-xs mt-0.5 leading-snug ${variant === 'ghost' ? 'text-slate-500' : 'opacity-70'}`}>
+        <div className={`text-xs mt-0.5 leading-snug ${variant === 'ghost' ? 'text-slate-500' : 'opacity-75'}`}>
           {sub}
         </div>
       </div>
@@ -77,13 +78,13 @@ export default function QrPage() {
       {/* ── Action buttons ── */}
       <div className="flex-1 px-5 pb-10 space-y-3 max-w-md mx-auto w-full">
 
-        {/* Menu CTA — highlighted */}
+        {/* Caffe menu — amber branded */}
         <ActionButton
           href="/menu"
-          emoji="🍺"
-          label="Caffe Planirka — Menu"
+          emoji="☕"
+          label="Caffe Planirka — Meni"
           sub="Kava, pića, hrana i cijene"
-          variant="primary"
+          variant="amber"
         />
 
         {/* Reservation buttons */}

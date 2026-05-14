@@ -65,6 +65,47 @@ export default function ServiceCards({ services }: { services: Service[] }) {
           </div>
         </motion.div>
       ))}
+
+      {/* ── Caffe Planirka — static card linking to /menu ── */}
+      <motion.div
+        variants={fadeUp}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        className="group bg-white rounded-2xl shadow-sm border-2 border-transparent hover:border-amber-400 hover:shadow-md transition-colors duration-200 overflow-hidden text-amber-600"
+      >
+        <div className="h-1.5 w-full bg-amber-400" />
+
+        <div className="p-6">
+          <div className="w-14 h-14 bg-amber-50 rounded-xl flex items-center justify-center text-2xl mb-4">
+            ☕
+          </div>
+
+          <h3 className="font-bold text-lg text-slate-900 mb-2">Caffe Planirka</h3>
+
+          <p className="text-sm text-slate-500 leading-relaxed mb-5">
+            Opuštena atmosfera uz kavu, sokove, pivo i grickalice. Savršeno
+            mjesto za druženje prije ili nakon sportske aktivnosti.
+          </p>
+
+          <div className="flex items-center justify-between text-xs text-slate-400 mb-5 pb-4 border-b border-slate-100">
+            <span className="flex items-center gap-1">
+              <span>🕐</span>
+              Pon–Pet 08–22 · Sub–Ned 08–20
+            </span>
+            <span className="flex items-center gap-1">
+              <span>💬</span>
+              po dogovoru
+            </span>
+          </div>
+
+          <Link
+            href="/menu"
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-sm transition-all min-h-[44px] bg-amber-50 text-amber-700 hover:bg-amber-100"
+          >
+            Pogledaj meni
+            <span className="text-xs">→</span>
+          </Link>
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

@@ -54,13 +54,20 @@ export default function CtaSection() {
             Rezerviraj termin
             <span>→</span>
           </Link>
-          <a
-            href="tel:+385910000000"
+          <Link
+            href="/raspored"
             className="inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-8 py-4 rounded-full text-base transition-all"
           >
-            <span>📞</span>
-            Pozovi nas
-          </a>
+            <span>📅</span>
+            Pogledaj raspored
+          </Link>
+          <Link
+            href="/menu"
+            className="inline-flex items-center justify-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold px-8 py-4 rounded-full text-base transition-all border border-amber-200"
+          >
+            <span>☕</span>
+            Caffe meni
+          </Link>
         </motion.div>
 
         <motion.div

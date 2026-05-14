@@ -2,9 +2,14 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { createReservation, isSlotAvailable } from '@/lib/supabase/queries/reservations';
-import { UNAVAILABLE_SLOTS } from '@/lib/mock-data';
-import type { ReservationStatus } from '@/types/app';
+import { createReservation, getReservations, isSlotAvailable } from '@/lib/supabase/queries/reservations';
+import { UNAVAILABLE_SLOTS, SERVICES } from '@/lib/mock-data';
+import {
+  sendAdminNewReservationMessage,
+  sendCustomerConfirmationMessage,
+  sendCustomerCancellationMessage,
+} from '@/lib/whatsapp/twilio';
+import type { Reservation, ReservationStatus } from '@/types/app';
 import type { ReservationRow } from '@/lib/supabase/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -26,7 +31,7 @@ function computeEndTime(startTime: string, durationMinutes: number): string {
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export type SubmitReservationResult =
-  | { success: true; bookingRef: string }
+  | { success: true; bookingRef: string; warning?: string }
   | { success: false; error: string };
 
 // ─── Availability ─────────────────────────────────────────────────────────────
@@ -73,6 +78,9 @@ export async function getAvailabilityAction(
  * Validate input, check availability with overlap logic, persist the reservation,
  * and return the booking reference. No authentication required — anonymous inserts
  * are allowed by the `reservations_anon_insert` RLS policy.
+ *
+ * On success, fires a WhatsApp admin notification. If that send fails the
+ * reservation is still returned with a non-blocking `warning` string.
  */
 export async function submitReservationAction(
   serviceId: string,
@@ -117,9 +125,21 @@ export async function submitReservationAction(
   }
 
   // ── Persist ───────────────────────────────────────────────────────────────
+  const serviceName = SERVICES.find((s) => s.id === serviceId)?.name ?? serviceId;
+
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
     // Dev/demo mode — no Supabase; derive a display code from a random UUID.
-    return { success: true, bookingRef: uuidToDisplayCode(crypto.randomUUID()) };
+    const bookingRef = uuidToDisplayCode(crypto.randomUUID());
+    const wa = await sendAdminNewReservationMessage({
+      bookingRef,
+      serviceName,
+      date,
+      time,
+      customerName: name,
+      customerPhone: phone,
+      note: note.trim() || undefined,
+    });
+    return { success: true, bookingRef, warning: wa.warning };
   }
 
   try {
@@ -133,8 +153,22 @@ export async function submitReservationAction(
       note:             note.trim(),
       status:           'novo',
     });
+
     // Derive the human-friendly code from the UUID Postgres generated.
-    return { success: true, bookingRef: uuidToDisplayCode(reservation.id) };
+    const bookingRef = uuidToDisplayCode(reservation.id);
+
+    // ── WhatsApp admin notification (non-blocking) ─────────────────────────
+    const wa = await sendAdminNewReservationMessage({
+      bookingRef,
+      serviceName,
+      date,
+      time,
+      customerName: name,
+      customerPhone: phone,
+      note: note.trim() || undefined,
+    });
+
+    return { success: true, bookingRef, warning: wa.warning };
   } catch (err) {
     const message = err instanceof Error ? err.message : '';
     if (
@@ -155,16 +189,50 @@ export async function submitReservationAction(
   }
 }
 
+// ─── Public schedule ─────────────────────────────────────────────────────────
+
+/**
+ * Fetch confirmed reservations for a given week (Monday..Sunday).
+ * Only `potvrđeno` and `plaćeno` statuses are returned — `novo` is hidden.
+ */
+export async function getPublicScheduleAction(weekStart: string): Promise<Reservation[]> {
+  // Derive weekEnd (Sunday = weekStart + 6 days)
+  const start = new Date(`${weekStart}T12:00:00`);
+  start.setDate(start.getDate() + 6);
+  const weekEnd = start.toISOString().split('T')[0];
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return [];
+  }
+
+  try {
+    const all = await getReservations({
+      dateFrom:  weekStart,
+      dateTo:    weekEnd,
+      limit:     500,
+      orderBy:   'reservation_date',
+      ascending: true,
+    });
+    return all.filter((r) => r.status === 'potvrđeno' || r.status === 'plaćeno');
+  } catch {
+    return [];
+  }
+}
+
 // ─── Admin status update ──────────────────────────────────────────────────────
 
 /**
  * Update the status of a reservation. Uses the service-role client so that
  * the admin panel works without an authenticated session (demo mode).
+ *
+ * When status changes to "potvrđeno" or "otkazano", fires a WhatsApp message
+ * to the customer. A failed send returns a non-blocking `warning` — the status
+ * update is not rolled back.
  */
 export async function updateReservationStatusAction(
   id: string,
   status: ReservationStatus,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; warning?: string }> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
     // Dev/demo mode — no real DB, accept optimistic update.
     return { success: true };
@@ -177,7 +245,7 @@ export async function updateReservationStatusAction(
     const { data, error } = await table
       .update({ status })
       .eq('id', id)
-      .select('id')
+      .select('id, customer_name, customer_phone, service_id, reservation_date, start_time')
       .single();
 
     if (error) {
@@ -191,7 +259,34 @@ export async function updateReservationStatusAction(
     }
 
     revalidatePath('/admin');
-    return { success: true };
+
+    // ── WhatsApp customer notification (non-blocking) ─────────────────────
+    let warning: string | undefined;
+
+    if (status === 'potvrđeno' || status === 'otkazano') {
+      const row = data as Pick<
+        ReservationRow,
+        'id' | 'customer_name' | 'customer_phone' | 'service_id' | 'reservation_date' | 'start_time'
+      >;
+
+      const ctx = {
+        bookingRef:    uuidToDisplayCode(row.id),
+        serviceName:   SERVICES.find((s) => s.id === row.service_id)?.name ?? row.service_id,
+        date:          row.reservation_date,
+        time:          row.start_time.slice(0, 5),
+        customerName:  row.customer_name,
+        customerPhone: row.customer_phone,
+      };
+
+      const wa =
+        status === 'potvrđeno'
+          ? await sendCustomerConfirmationMessage(ctx)
+          : await sendCustomerCancellationMessage(ctx);
+
+      warning = wa.warning;
+    }
+
+    return { success: true, warning };
   } catch (err) {
     console.error('[updateReservationStatusAction] Unexpected error:', err);
     return { success: false, error: String(err) };

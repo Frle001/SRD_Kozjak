@@ -37,8 +37,8 @@ export default async function RasporedPage() {
       orderBy:   'reservation_date',
       ascending: true,
     });
-    // Only active bookings occupy slots; cancelled ones free up the time.
-    reservations = all.filter((r) => r.status !== 'otkazano');
+    // Public schedule shows only confirmed/paid bookings — novo and otkazano are hidden.
+    reservations = all.filter((r) => r.status === 'potvrđeno' || r.status === 'plaćeno');
   } catch {
     // Supabase not configured — timetable shows recurring schedule only.
   }

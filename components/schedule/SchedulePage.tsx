@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useTransition, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import WeeklyTimetable from './WeeklyTimetable';
 import ScheduleFilters from './ScheduleFilters';
+import { getPublicScheduleAction } from '@/app/actions/reservations';
 import {
   LOCATION_CONFIG,
   ACTIVITY_CONFIG,
@@ -71,6 +72,49 @@ function buildDayReservations(
   }
 
   return map;
+}
+
+// ─── Week helpers ─────────────────────────────────────────────────────────────
+
+const HR_MONTHS = [
+  'siječnja', 'veljače', 'ožujka', 'travnja', 'svibnja', 'lipnja',
+  'srpnja', 'kolovoza', 'rujna', 'listopada', 'studenoga', 'prosinca',
+];
+
+/** Return the Monday date (YYYY-MM-DD) for the week containing today. */
+function getCurrentMondayStr(): string {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  return monday.toISOString().split('T')[0];
+}
+
+/** Add `days` days to a YYYY-MM-DD string. */
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+/** Format a week range as "12. – 18. svibnja 2026." */
+function formatWeekRange(mondayStr: string): string {
+  const mon = new Date(`${mondayStr}T12:00:00`);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+
+  const monDay = mon.getDate();
+  const sunDay = sun.getDate();
+  const month  = HR_MONTHS[sun.getMonth()];
+  const year   = sun.getFullYear();
+
+  // Same month
+  if (mon.getMonth() === sun.getMonth()) {
+    return `${monDay}. – ${sunDay}. ${month} ${year}.`;
+  }
+  // Spans two months
+  const monMonth = HR_MONTHS[mon.getMonth()];
+  return `${monDay}. ${monMonth} – ${sunDay}. ${month} ${year}.`;
 }
 
 const LOCATIONS: Location[] = ['teren', 'dvorana-1', 'dvorana-2'];
@@ -205,12 +249,32 @@ function StatsStrip({ location }: { location: Location }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SchedulePage({
-  reservations = [],
-  weekStart,
+  reservations: initialReservations = [],
+  weekStart: serverWeekStart,
 }: {
   reservations?: Reservation[];
   weekStart?: string;
 }) {
+  // Week navigation
+  const currentMondayStr = useMemo(() => serverWeekStart ?? getCurrentMondayStr(), [serverWeekStart]);
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week
+  const [reservations, setReservations] = useState<Reservation[]>(initialReservations);
+  const [isPending, startTransition] = useTransition();
+
+  const displayWeekStart = useMemo(
+    () => addDays(currentMondayStr, weekOffset * 7),
+    [currentMondayStr, weekOffset],
+  );
+
+  const changeWeek = useCallback((newOffset: number) => {
+    setWeekOffset(newOffset);
+    startTransition(async () => {
+      const newWeekStart = addDays(currentMondayStr, newOffset * 7);
+      const data = await getPublicScheduleAction(newWeekStart);
+      setReservations(data);
+    });
+  }, [currentMondayStr]);
+
   const [location, setLocation] = useState<Location>('teren');
   const [activeDays, setActiveDays] = useState<number[]>([]);
   const [activeStatuses, setActiveStatuses] = useState<SlotStatus[]>([]);
@@ -266,11 +330,35 @@ export default function SchedulePage({
               </p>
             </div>
 
-            {/* Admin note */}
-            <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2">
-              <span className="text-slate-400 text-xs">📄</span>
-              <p className="text-[11px] text-slate-400 leading-snug max-w-56">
-                Digitalizirano iz postojećeg rasporeda termina ŠRD Kozjak
+            {/* Week navigation */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => changeWeek(weekOffset - 1)}
+                  disabled={isPending}
+                  aria-label="Prethodni tjedan"
+                  className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition-colors disabled:opacity-40"
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={() => changeWeek(0)}
+                  disabled={isPending || weekOffset === 0}
+                  className="px-3 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-colors disabled:opacity-40 whitespace-nowrap"
+                >
+                  Ovaj tjedan
+                </button>
+                <button
+                  onClick={() => changeWeek(weekOffset + 1)}
+                  disabled={isPending}
+                  aria-label="Sljedeći tjedan"
+                  className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition-colors disabled:opacity-40"
+                >
+                  ›
+                </button>
+              </div>
+              <p className={`text-xs text-center transition-opacity ${isPending ? 'opacity-40' : 'text-slate-300'}`}>
+                {formatWeekRange(displayWeekStart)}
               </p>
             </div>
           </motion.div>
@@ -323,7 +411,7 @@ export default function SchedulePage({
               activeDays={activeDays}
               activeStatuses={activeStatuses}
               dayReservations={dayReservations}
-              weekStart={weekStart}
+              weekStart={displayWeekStart}
             />
           </div>
 
