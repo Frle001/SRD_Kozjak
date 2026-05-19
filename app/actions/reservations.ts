@@ -2,8 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { createReservation, getReservations, isSlotAvailable } from '@/lib/supabase/queries/reservations';
-import { UNAVAILABLE_SLOTS, SERVICES } from '@/lib/mock-data';
+import { createReservation, isSlotAvailable } from '@/lib/supabase/queries/reservations';
+import { UNAVAILABLE_SLOTS, SERVICES, TIME_SLOTS } from '@/lib/mock-data';
 import {
   sendAdminNewReservationMessage,
   sendCustomerConfirmationMessage,
@@ -36,39 +36,130 @@ export type SubmitReservationResult =
 
 // ─── Availability ─────────────────────────────────────────────────────────────
 
+// Physical location used for schedule_slot blocking, keyed by service_id.
+// Distinct from SERVICE_TO_LOCATION in kozjak-schedule.ts (that mapping drives
+// the timetable display tab and must remain unchanged).
+const BOOKING_LOCATION: Readonly<Record<string, string | null>> = {
+  'mali-nogomet': 'teren',
+  'stolni-tenis': 'dvorana-2',
+  'treninzi':     'dvorana-1',
+  'rodendani':    'dvorana-1',
+  'caffe-bar':    null,
+};
+
+/** Parse 'HH:MM' or 'HH:MM:SS' to minutes since midnight. */
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+
 /**
- * Return the list of taken start times ('HH:MM') for a given service and date.
- * Falls back to mock data when Supabase is not configured.
+ * Return blocked time slots for the given service and date, split by reason:
+ *   takenSlots   — blocked by schedule_slots or confirmed (potvrđeno/plaćeno) reservations → "Zauzeto"
+ *   pendingSlots — blocked only by unconfirmed (novo) reservations → "Čeka potvrdu"
+ *
+ * A slot is blocked when its booking window (slot start → slot start + service duration)
+ * overlaps a blocked interval. Overlap test: slotStart < blockedEnd AND slotEnd > blockedStart
+ *
+ * Falls back to static mock data when Supabase is not configured.
  */
 export async function getAvailabilityAction(
   serviceId: string,
   date: string,
-): Promise<{ takenSlots: string[] }> {
+): Promise<{ takenSlots: string[]; pendingSlots: string[] }> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    return { takenSlots: UNAVAILABLE_SLOTS[date] ?? [] };
+    return { takenSlots: UNAVAILABLE_SLOTS[date] ?? [], pendingSlots: [] };
   }
 
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('reservations')
-      .select('start_time')
-      .eq('service_id', serviceId)
-      .eq('reservation_date', date)
-      .in('status', ['novo', 'potvrđeno', 'plaćeno']);
+  const durationMin = SERVICES.find((s) => s.id === serviceId)?.duration ?? 60;
+  const location    = BOOKING_LOCATION[serviceId] ?? null;
 
-    if (error) {
-      console.error('[getAvailabilityAction]', error.message);
-      return { takenSlots: [] };
+  // day_of_week: Monday = 1, Sunday = 7 (matches schedule_slots convention)
+  const jsDay    = new Date(`${date}T12:00:00`).getDay(); // 0 = Sun
+  const dayOfWeek = jsDay === 0 ? 7 : jsDay;
+
+  try {
+    // Use the service-role client so that RLS never silently drops rows.
+    // This action runs entirely server-side; the data (times + statuses) is
+    // not PII and the result is computed server-side before returning to the client.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = (await createServiceClient()) as any;
+
+    // Run all three queries in parallel.
+    const [confirmedResult, pendingResult, schedResult] = await Promise.all([
+      // ── 1a. Confirmed / paid reservations → "Zauzeto" ──────────────────
+      supabase
+        .from('reservations')
+        .select('start_time, end_time')
+        .eq('service_id', serviceId)
+        .eq('reservation_date', date)
+        .in('status', ['potvrđeno', 'plaćeno']),
+
+      // ── 1b. Pending (novo) reservations → "Čeka potvrdu" ───────────────
+      supabase
+        .from('reservations')
+        .select('start_time, end_time')
+        .eq('service_id', serviceId)
+        .eq('reservation_date', date)
+        .eq('status', 'novo'),
+
+      // ── 2. Recurring schedule blocks → "Zauzeto" ───────────────────────
+      location
+        ? supabase
+            .from('schedule_slots')
+            .select('start_hour, end_hour')
+            .eq('location_id', location)
+            .eq('day_of_week', dayOfWeek)
+            .in('status', ['zauzeto', 'rezervirano', 'ceka-potvrdu'])
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (confirmedResult.error) {
+      console.error('[getAvailabilityAction] confirmed reservations:', confirmedResult.error.message);
+    }
+    if (pendingResult.error) {
+      console.error('[getAvailabilityAction] pending reservations:', pendingResult.error.message);
+    }
+    if (schedResult.error) {
+      console.error('[getAvailabilityAction] schedule_slots:', schedResult.error.message);
     }
 
-    const takenSlots = (data as Pick<ReservationRow, 'start_time'>[])
-      .map((r) => r.start_time.slice(0, 5)); // 'HH:MM:SS' → 'HH:MM'
+    const confirmedRows = (confirmedResult.data ?? []) as Array<{ start_time: string; end_time: string }>;
+    const pendingRows   = (pendingResult.data   ?? []) as Array<{ start_time: string; end_time: string }>;
+    const schedRows     = (schedResult.data     ?? []) as Array<{ start_hour: number; end_hour: number }>;
 
-    return { takenSlots };
+    // ── 3. Build blocked intervals ────────────────────────────────────────
+    type Interval = [number, number];
+    const confirmedIntervals: Interval[] = [];
+    const pendingIntervals:   Interval[] = [];
+
+    for (const r of confirmedRows) {
+      confirmedIntervals.push([toMinutes(r.start_time), toMinutes(r.end_time)]);
+    }
+    for (const s of schedRows) {
+      confirmedIntervals.push([s.start_hour * 60, s.end_hour * 60]);
+    }
+    for (const r of pendingRows) {
+      pendingIntervals.push([toMinutes(r.start_time), toMinutes(r.end_time)]);
+    }
+
+    // ── 4. Filter TIME_SLOTS by overlap ──────────────────────────────────
+    const overlaps = (slot: string, intervals: Interval[]): boolean => {
+      const slotStart = toMinutes(slot);
+      const slotEnd   = slotStart + durationMin;
+      return intervals.some(([bStart, bEnd]) => slotStart < bEnd && slotEnd > bStart);
+    };
+
+    const takenSlots = TIME_SLOTS.filter((slot) => overlaps(slot, confirmedIntervals));
+    // A slot is "pending" only if it isn't already hard-blocked as "taken"
+    const pendingSlots = TIME_SLOTS.filter(
+      (slot) => !takenSlots.includes(slot) && overlaps(slot, pendingIntervals),
+    );
+
+    return { takenSlots, pendingSlots };
   } catch (err) {
     console.error('[getAvailabilityAction]', err);
-    return { takenSlots: [] };
+    return { takenSlots: [], pendingSlots: [] };
   }
 }
 
@@ -192,28 +283,61 @@ export async function submitReservationAction(
 // ─── Public schedule ─────────────────────────────────────────────────────────
 
 /**
- * Fetch confirmed reservations for a given week (Monday..Sunday).
- * Only `potvrđeno` and `plaćeno` statuses are returned — `novo` is hidden.
+ * Fetch confirmed reservations for a given week (Monday..Sunday) for the
+ * public schedule view. Only `potvrđeno` and `plaćeno` are returned.
+ *
+ * Uses the service-role client so that the column-level REVOKE on customer_name,
+ * customer_phone, note (which protects PII from the anon key) does not affect
+ * this server-side query. Only non-PII columns are selected — the public
+ * schedule never displays customer details.
  */
 export async function getPublicScheduleAction(weekStart: string): Promise<Reservation[]> {
   // Derive weekEnd (Sunday = weekStart + 6 days)
-  const start = new Date(`${weekStart}T12:00:00`);
-  start.setDate(start.getDate() + 6);
-  const weekEnd = start.toISOString().split('T')[0];
+  const d = new Date(`${weekStart}T12:00:00`);
+  d.setDate(d.getDate() + 6);
+  const weekEnd = d.toISOString().split('T')[0];
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
     return [];
   }
 
   try {
-    const all = await getReservations({
-      dateFrom:  weekStart,
-      dateTo:    weekEnd,
-      limit:     500,
-      orderBy:   'reservation_date',
-      ascending: true,
-    });
-    return all.filter((r) => r.status === 'potvrđeno' || r.status === 'plaćeno');
+    const supabase = await createServiceClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const table = supabase.from('reservations') as any;
+    const { data, error } = await table
+      .select('id, service_id, reservation_date, start_time, status')
+      .in('status', ['potvrđeno', 'plaćeno'])
+      .gte('reservation_date', weekStart)
+      .lte('reservation_date', weekEnd)
+      .order('reservation_date', { ascending: true })
+      .limit(500);
+
+    if (error) {
+      console.error('[getPublicScheduleAction]', error.message);
+      return [];
+    }
+
+    // Map the minimal columns to Reservation. PII fields are empty because
+    // they are never rendered on the public schedule page.
+    return (data as Array<{
+      id: string;
+      service_id: string;
+      reservation_date: string;
+      start_time: string;
+      status: string;
+    }>).map((row) => ({
+      id:          row.id,
+      serviceId:   row.service_id as Reservation['serviceId'],
+      serviceName: SERVICES.find((s) => s.id === row.service_id)?.name ?? row.service_id,
+      date:        row.reservation_date,
+      time:        row.start_time.slice(0, 5),
+      name:        '',
+      phone:       '',
+      note:        '',
+      status:      row.status as Reservation['status'],
+      createdAt:   '',
+    }));
   } catch {
     return [];
   }

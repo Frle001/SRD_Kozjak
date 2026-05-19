@@ -212,20 +212,29 @@ function DateTimeStep({
   onTimeChange: (t: string) => void;
 }) {
   const today = getTodayStr();
-  const [takenSlots, setTakenSlots] = useState<string[]>([]);
+  const [takenSlots,   setTakenSlots]   = useState<string[]>([]);
+  const [pendingSlots, setPendingSlots] = useState<string[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
 
   // Fetch real slot availability whenever service or date changes.
+  // Clears the selected time if it becomes blocked after a refetch.
   useEffect(() => {
     if (!date) {
       setTakenSlots([]);
+      setPendingSlots([]);
       return;
     }
     let cancelled = false;
     setAvailabilityLoading(true);
     getAvailabilityAction(serviceId, date).then((result) => {
       if (!cancelled) {
+        console.log('[Availability]', { serviceId, date, result });
         setTakenSlots(result.takenSlots);
+        setPendingSlots(result.pendingSlots);
+        // If the currently selected time became blocked, deselect it
+        if (time && (result.takenSlots.includes(time) || result.pendingSlots.includes(time))) {
+          onTimeChange('');
+        }
         setAvailabilityLoading(false);
       }
     });
@@ -234,7 +243,7 @@ function DateTimeStep({
     };
   }, [serviceId, date]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const freeCount = TIME_SLOTS.length - takenSlots.length;
+  const freeCount = TIME_SLOTS.length - takenSlots.length - pendingSlots.length;
 
   return (
     <div>
@@ -309,22 +318,28 @@ function DateTimeStep({
             }`}
           >
             {TIME_SLOTS.map((slot) => {
-              const taken = takenSlots.includes(slot);
-              const selected = time === slot;
+              const taken    = takenSlots.includes(slot);
+              const pending  = pendingSlots.includes(slot);
+              const blocked  = taken || pending;
+              const selected = !blocked && time === slot;
               return (
                 <button
                   key={slot}
-                  disabled={taken}
-                  onClick={() => onTimeChange(slot)}
-                  className={`py-3 px-3 rounded-xl text-sm font-medium border-2 transition-all min-h-[44px] ${
+                  disabled={blocked}
+                  onClick={() => !blocked && onTimeChange(slot)}
+                  className={`py-3 px-3 rounded-xl text-sm font-medium border-2 transition-all min-h-[44px] flex flex-col items-center justify-center gap-0.5 ${
                     taken
-                      ? 'border-slate-100 bg-slate-100 text-slate-300 cursor-not-allowed line-through'
+                      ? 'border-slate-100 bg-slate-100 cursor-not-allowed'
+                      : pending
+                      ? 'border-amber-100 bg-amber-50 cursor-not-allowed'
                       : selected
                       ? 'border-green-500 bg-green-500 text-white shadow-md'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-green-400 hover:text-green-700'
                   }`}
                 >
-                  {slot}
+                  <span className={blocked ? 'line-through text-slate-300' : ''}>{slot}</span>
+                  {taken   && <span className="text-[10px] font-semibold text-slate-400 leading-none">Zauzeto</span>}
+                  {pending && <span className="text-[10px] font-semibold text-amber-500 leading-none">Čeka potvrdu</span>}
                 </button>
               );
             })}
